@@ -1,91 +1,145 @@
-const {rand, random, MultiplyMatrix, sigmoid, TransMatrix} = require('./lib');
+import { getRandom } from "./lib";
 
-const arr = [
-    [1,2,3],
-    [4,5,6]
-]
-console.log(TransMatrix(arr));
-class NeuralNetwork {
-    constructor(inputnodes, hiddennodes, outputnodes, learningrate){
-        // Количество узлов во входном скрытом и выходном слое
-        this.inodes = inputnodes;
-        this.hnodes = hiddennodes;
-        this.onodes = outputnodes;
+type INeuralProps = {input: number, hidden: number, output: number}
+export class Network {
+    props: INeuralProps;
+    minRandom: number = -0.5;
+    maxRandom: number = 0.5;
 
-        // Коэфициент обучения
-        this.learningrate = learningrate;
+    input: number[] = [];
+    hidden: number[] = [];
+    output: number[] = [];
 
-        this.wih = rand(3, 3, () => random(-0.5, 0.5));
-        this.who = rand(3, 3, () => random(-0.5, 0.5));
+    weight: {[key in string]: number} = {}
+
+    learningRate: number = 0.3;
+
+    hiddenActivate: number[] = [];
+    outputActivate: number[] = [];
+
+    hiddenErrors: number[] = [];
+    outputErrors: number[] = [];
+
+    constructor(props: INeuralProps){
+        
+        this.props = props;
+
+        this.InputJoinHidden();
+        this.HiddenJoinOutput();
     }
 
-    train(inputList, targetList) {
-        const input = inputList.map((item) => ([item]));
-        const target = targetList.map((item) => ([item]));
-
-        const hiddenInputs = MultiplyMatrix(this.wih, input);
-        const hiddenOutputs = hiddenInputs.map(([item]) => [sigmoid(item)]);
+    InputJoinHidden() {
+        const {input, hidden} = this.props;
         
-        const finalInputs = MultiplyMatrix(this.who, hiddenOutputs);
-        const finalOutputs = finalInputs.map(([item]) => [sigmoid(item)]);
-
-        const outputError = target.map(([item], index) => ([item - finalOutputs[index][0]]));
-        
-        const hiddenError = MultiplyMatrix(this.who, outputError);
-
-        const finalOutputsMinusOne = finalOutputs.map(([item]) => ([1.0 - item]));
-        
-        const resultWho = MultiplyMatrix(outputError.map(([item], index) => {
-            return [item * finalOutputs[index][0] * finalOutputsMinusOne[index][0]]
-        }), TransMatrix(hiddenOutputs)).map((item) => {
-            return [
-                this.learningrate * item[0],
-                this.learningrate * item[1],
-                this.learningrate * item[2],
-            ];
-        })
-
-        this.who = this.who.map((item, index) => {
-            return ([
-                item[0] + resultWho[index][0], 
-                item[1] + resultWho[index][0], 
-                item[2] + resultWho[index][0]
-            ])
-        })
-
-        
-        const hiddenOutputsMinusOne = hiddenOutputs.map(([item]) => ([1.0 - item]));
-        
-        const resultWih = MultiplyMatrix(hiddenError.map(([item], index) => {
-            return [item * hiddenOutputs[index][0] * hiddenOutputsMinusOne[index][0]]
-        }), TransMatrix(hiddenOutputs)).map((item) => {
-            return [
-                this.learningrate * item[0],
-                this.learningrate * item[1],
-                this.learningrate * item[2]
-            ]
-        })
-        
-        this.wih = this.wih.map((item, index) => {
-            return ([
-                item[0] + resultWih[index][0], 
-                item[1] + resultWih[index][0], 
-                item[2] + resultWih[index][0]
-            ])
-        })
-        
+        for(let i = 0; i < input; i++) {
+            for(let h = 0; h < hidden; h++) {
+                this.weight[`i[${i}]h[${h}]`] = getRandom(this.minRandom, this.maxRandom)
+            }   
+        }
     }
 
-    query(inputList) {
-        const input = inputList.map((item) => ([item]));
-
-        const hiddenInputs = MultiplyMatrix(this.wih, input);
-        const hiddenOutputs = hiddenInputs.map(([item]) => [sigmoid(item)]);
+    HiddenJoinOutput() {
+        const {hidden, output} = this.props;
         
-        const finalInputs = MultiplyMatrix(this.who, hiddenOutputs);
-        const finalOutputs = finalInputs.map(([item]) => [sigmoid(item)]);
-
-        return finalOutputs;
+        for(let h = 0; h < hidden; h++) {
+            for(let o = 0; o < output; o++) {
+                this.weight[`h[${h}]o[${o}]`] = getRandom(this.minRandom, this.maxRandom)
+            }   
+        }
     }
+
+    activate(x: number): number {
+        return this.activationSigmoid(x)
+    }
+
+    derivative(x: number): number {
+        return this.derivativeSigmoid(x);
+    }
+
+    activationSigmoid(x: number): number {
+        return 1 / (1 + Math.exp(-x));
+    }
+
+    derivativeSigmoid(x: number): number {
+        const fx = this.activationSigmoid(x);
+        return fx * (1 - fx);
+    };
+
+    query(input: number[]) {
+        let hiddenInput:  number[] = [];
+        let hiddenOutput: number[] = [];
+        let outputInput:  number[] = [];
+        let outputOutput: number[] = [];
+
+        for(let h = 0; h < this.props.hidden; h++) {
+            let count = 0;
+            for(let i = 0; i < input.length; i++) {
+                count += input[i] * this.weight[`i[${i}]h[${h}]`];
+            }
+            hiddenInput[h] = count;
+        }
+        hiddenOutput = hiddenInput.map((i) => this.activate(i));
+
+        for(let h = 0; h < this.props.output; h++) {
+            let count = 0;
+            for(let i = 0; i < hiddenOutput.length; i++) {
+                count += hiddenOutput[i] * this.weight[`h[${i}]o[${h}]`];
+            }
+            outputInput[h] = count;
+        }
+        outputOutput = outputInput.map((i) => this.activate(i));
+
+        return outputOutput;
+    }
+    
+    train(input: number[], target: number[]) {
+        let hiddenInput:  number[] = [];
+        let hiddenOutput: number[] = [];
+        let outputInput:  number[] = [];
+        let outputOutput: number[] = [];
+
+        for(let h = 0; h < this.props.hidden; h++) {
+            let count = 0;
+            for(let i = 0; i < input.length; i++) {
+                count += input[i] * this.weight[`i[${i}]h[${h}]`];
+            }
+            hiddenInput[h] = count;
+        }
+        hiddenOutput = hiddenInput.map((i) => this.activate(i));
+
+        for(let h = 0; h < this.props.output; h++) {
+            let count = 0;
+            for(let i = 0; i < hiddenOutput.length; i++) {
+                count += hiddenOutput[i] * this.weight[`h[${i}]o[${h}]`];
+            }
+            outputInput[h] = count;
+        }
+        outputOutput = outputInput.map((i) => this.activate(i));
+    
+        
+        //Обучение начинается:
+        // мы расчитываем разницу
+        let outputErrors: number[] = target.map((num, index) => (num - outputOutput[index]) * this.derivative(outputInput[index]));
+        let hiddenErrors:number[] = [];
+        
+        for(let h = 0; h < this.props.hidden; h++) {
+            let error = 0;
+            for(let o = 0; o < outputErrors.length; o++){
+                error += outputErrors[o] * this.weight[`h[${h}]o[${o}]`];
+            }
+            hiddenErrors[h] = error * this.derivative(hiddenInput[h]);
+        }
+
+        for(let h = 0; h < this.props.hidden; h++) {
+            for(let o = 0; o < this.props.output; o++) {
+                this.weight[`h[${h}]o[${o}]`] += this.learningRate * outputErrors[o] * hiddenOutput[h];
+            }
+        }
+
+        for(let i = 0; i < this.props.input; i++) {
+            for(let h = 0; h < this.props.hidden; h++) {
+                this.weight[`i[${i}]h[${h}]`] += this.learningRate * hiddenErrors[h] * input[i];
+            }
+        }
+    }   
 }
-module.exports = NeuralNetwork;
