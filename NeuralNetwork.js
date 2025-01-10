@@ -1,5 +1,6 @@
-import { getRandom } from "./lib";
-
+export function getRandom(min: number, max: number): number {
+    return Math.random() * (max - min) + min;
+}
 type INeuralProps = {input: number, hidden: number, output: number}
 export class Network {
     props: INeuralProps;
